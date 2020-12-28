@@ -6,12 +6,18 @@ pragma solidity >=0.7.0 <0.8.0;
  * @title eOrganico
  * @dev Contrato de itens orgânicos (Produção e Distribuição)
  * MDT-2020 - PUC-Rio - Grupo 6 - eOrganico
+ * 
+ * TODO: Em algum momento, usar o mecanismo de transações casadas (Ex: Compra + Venda).
+ * Há várias oportunidades no contrato (Compra/Venda de Sementes, Distribuição de Produtos, Entrega, etc.)
  */
 contract ContratoEsperto {
+    uint256 constant mes = 30 days; // TODO: Usar uma biblioteca de data!
+
     address payable eOrganico; // Chave da eOrganico
     
     // Assinaturas
-    mapping(string => uint256) valoresPeriodos; // Períodos e seus valores
+    enum Periodos { Mensal, Trimestral, Anual }
+    mapping(Periodos => uint256) valoresPeriodos; // Períodos e seus valores
 
     // Credenciamentos
     mapping(address => uint256) fornecedoresCredenciados; // Fornecedores de sementes
@@ -19,6 +25,11 @@ contract ContratoEsperto {
     mapping(address => uint256) cooperativasCredenciadas;
     mapping(address => uint256) transportadorasCredenciadas;
     
+    // Assinaturas
+    mapping(address => uint256) assinaturas; // cliente -> timestamp de expiração
+    uint256 assinaturasVigentes = 0;
+    uint256 maxAssinaturas = 0;
+
     // Sementes
     mapping(address => mapping(string => uint256)) sementesCertificadas;
     
@@ -30,7 +41,7 @@ contract ContratoEsperto {
         eOrganico = msg.sender;
     }
     
-    function defineValorPeriodo(string calldata periodo, uint256 valor) public {
+    function defineValorPeriodo(Periodos periodo, uint256 valor) public {
         require(msg.sender == eOrganico); // Só a eOrganico pode definir isso
         require(valor > 0, "Valor do periodo deve ser maior que zero");
         
@@ -100,7 +111,122 @@ contract ContratoEsperto {
         require(transportadorasCredenciadas[transportadora] != 0, "Transportadora' precisa estar credenciada");
     }
 
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Assinaturas
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    function informaAssinaturasDisponiveis(uint256 quantidade) public {
+        require(msg.sender == eOrganico); // Só a eOrganico pode definir isso
+
+        // TODO: Tem que tratar as assintaturas que expiraram
+        require(quantidade >= assinaturasVigentes, "Ja ha mais assinaturas vigentes do que o informado");
+        
+        maxAssinaturas = quantidade;
+    }
+
+    function assinaServico(Periodos periodo) public payable returns (uint256) {
+        address payable cliente = msg.sender;
+        require(assinaturas[cliente] == 0, "Cliente ja eh assinante"); // TODO: Tratar as assinaturas que expiraram
+
+        require(valoresPeriodos[periodo] > 0, "Sem valor para o periodo");
+        require(msg.value >= valoresPeriodos[periodo], "Valor insuficiente para o periodo");
+        require(assinaturasVigentes < maxAssinaturas, "Nao ha mais assinaturas disponiveis");
+
+        uint256 vigencia = calculaVigencia(periodo);
+        require(vigencia > block.timestamp, "Vigencia invalida");
+
+        uint256 inicio = calculaInicioFornecimento();
+        require(inicio > block.timestamp, "Inicio invalido");
+        
+        assinaturasVigentes++;
+        assinaturas[cliente] = vigencia;
+
+        uint256 troco = msg.value - valoresPeriodos[periodo];
+        if (troco > 0) {
+            msg.sender.transfer(troco);
+        }
+        
+        return inicio;
+    }
+
+    function calculaVigencia(Periodos periodo) private view returns (uint256) {
+        if (periodo == Periodos.Anual) {
+            return block.timestamp + 12 * mes;
+        }
+        
+        if (periodo == Periodos.Trimestral) {
+            return block.timestamp + 3 * mes;
+        }
+
+        if (periodo == Periodos.Mensal) {
+            return block.timestamp + 1 * mes;
+        }
+        
+        return 0;
+    }
+
+    function calculaInicioFornecimento() private view returns (uint256) {
+        // Sempre 15 dias depois
+        // TODO: Usar outros parametros para calcular esse prazo?
+        return block.timestamp + 15 days;
+    }
+
+    function verificaCliente(address cliente) private view {
+        require(assinaturas[cliente] > block.timestamp, "Nao possui assinatura vigente");
+    }
+
+    function cancelaAssinatura(address payable cliente) public {
+        require(msg.sender == eOrganico); // Só a eOrganico pode definir isso
+
+        trataCancelamentoAssinatura(cliente);
+    }
     
+    function cancelaAssinatura() public {
+        address payable cliente = msg.sender;
+        require(assinaturas[cliente] != 0, "Nao eh cliente para cancelar assinatura");
+        
+        trataCancelamentoAssinatura(cliente);
+    }
+    
+    function trataCancelamentoAssinatura(address payable cliente) private {
+        require(msg.sender == eOrganico || (msg.sender == cliente && assinaturas[msg.sender] != 0) , "Solicitante invalido");
+        
+        uint256 devolucao = calculaDevolucaoAssinatura(assinaturas[cliente]);
+        assinaturas[cliente] = 0;
+        assinaturasVigentes--;
+        
+        if (devolucao > 0) {
+            cliente.transfer(devolucao);
+        }
+    }
+
+    function calculaDevolucaoAssinatura(uint256 expiracao) private view returns (uint256) {
+        if (expiracao <= block.timestamp) {
+            return 0;
+        }
+        
+        uint256 diasRestantes = (expiracao - block.timestamp) / 1 days;
+        if (diasRestantes < 30) {
+            return 0;
+        }
+        
+        uint256 mesesRestantes = diasRestantes / mes;
+        if (mesesRestantes < 1) {
+            return 0;
+        }
+        
+        // BUG!!! Se os periodos tiverem valores diferentes, pode gerar devolver mais do que pagou
+        // BUG!!! Se o periodo Mensal não estiver definido, não devolve nada
+        uint256 devolucao = mesesRestantes * valoresPeriodos[Periodos.Mensal];
+        return devolucao;
+    }
+
+    function consultaAssinaturasVigentes() public pure returns (address[] memory) {
+        // FIXME: Não é possível listar as assinaturas vigentes - Precisamos trocar de estrutura de armazenamento
+        // TODO: Usar IterableMappings - https://docs.soliditylang.org/en/v0.7.0/types.html#iterable-mappings
+        return new address[](0);
+    }
+
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Sementes
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -147,12 +273,70 @@ contract ContratoEsperto {
         
         // Verifica se o produtor tem as sementes
         require(sementesCertificadas[produtor][produto] >= qtdSementes);
-        
+
         // Reduz as sementes
         sementesCertificadas[produtor][produto] -= qtdSementes;
-        
+
         // Registra os produtos
         produtosCertificados[produtor][produto] += qtdProdutos;
     }
 
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Distribuição
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    function cooperativaRecebeProdutos(address produtor, string calldata produto, uint256 qtdProdutos) public {
+        address cooperativa = msg.sender;
+        verificaCooperativaCredenciada(cooperativa);
+        verificaProdutorCredenciado(produtor);
+        
+        require(qtdProdutos > 0, "Quantidade de produtos deve ser maior que zero");
+        
+        // Verifica se o produtor tem os produtos
+        require(produtosCertificados[produtor][produto] >= qtdProdutos);
+
+        // Transfere os produtos
+        produtosCertificados[produtor][produto] -= qtdProdutos;
+        produtosCertificados[cooperativa][produto] += qtdProdutos;
+    }
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Despacho
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    function transportadoraRecebeProdutos(address cooperativa, string calldata produto, uint256 qtdProdutos) public {
+        address transportadora = msg.sender;
+        verificaTransportadoraCredenciada(transportadora);
+        verificaCooperativaCredenciada(cooperativa);
+        
+        require(qtdProdutos > 0, "Quantidade de produtos deve ser maior que zero");
+        
+        // Verifica se a cooperativa tem os produtos'
+        require(produtosCertificados[cooperativa][produto] >= qtdProdutos);
+
+        // Transfere os produtos
+        produtosCertificados[cooperativa][produto] -= qtdProdutos;
+        produtosCertificados[transportadora][produto] += qtdProdutos;
+    }
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Entrega
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    function clienteRecebeProdutos(address transportadora, string calldata produto, uint256 qtdProdutos) public {
+        address cliente = msg.sender;
+        verificaCliente(cliente);
+        verificaTransportadoraCredenciada(transportadora);
+
+        require(qtdProdutos > 0, "Quantidade de produtos deve ser maior que zero");
+        
+        // Verifica se a transportadora tem os produtos'
+        require(produtosCertificados[transportadora][produto] >= qtdProdutos);
+
+        // Transfere os produtos
+        produtosCertificados[transportadora][produto] -= qtdProdutos;
+        produtosCertificados[cliente][produto] += qtdProdutos;
+        
+        // TODO: Aqui, só acumula... O que fazer com a quantidade de produtos com o cliente?
+    }
 }
