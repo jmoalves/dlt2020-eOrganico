@@ -42,7 +42,7 @@ contract ContratoEsperto {
     }
     
     function defineValorPeriodo(Periodos periodo, uint256 valor) public {
-        require(msg.sender == eOrganico); // Só a eOrganico pode definir isso
+        require(msg.sender == eOrganico, "Somente eOrganico pode usar esse servico");
         require(valor > 0, "Valor do periodo deve ser maior que zero");
         
         // TODO: O melhor seria usar enum ou algo parecido. Ou ao menos "normalizar" a string (maiúsculas, minúsculas, etc.)
@@ -56,12 +56,18 @@ contract ContratoEsperto {
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     function credenciaFornecedor(address payable fornecedor) public {
-        require(msg.sender == eOrganico); // Só a eOrganico pode definir isso
+        require(msg.sender == eOrganico, "Somente eOrganico pode usar esse servico");
+        require(fornecedor != eOrganico, "Parametro invalido");
+        require(fornecedor != address(this), "Parametro invalido");
+
         fornecedoresCredenciados[fornecedor] = block.timestamp; // Apenas para mapear alguma coisa...
     }
     
     function descredenciaFornecedor(address payable fornecedor) public {
-        require(msg.sender == eOrganico); // Só a eOrganico pode definir isso
+        require(msg.sender == eOrganico, "Somente eOrganico pode usar esse servico");
+        require(fornecedor != eOrganico, "Parametro invalido");
+        require(fornecedor != address(this), "Parametro invalido");
+
         fornecedoresCredenciados[fornecedor] = 0; // Remove o mapeamento
     }
     
@@ -70,12 +76,18 @@ contract ContratoEsperto {
     }
     
     function credenciaProdutor(address payable produtor) public {
-        require(msg.sender == eOrganico); // Só a eOrganico pode definir isso
+        require(msg.sender == eOrganico, "Somente eOrganico pode usar esse servico");
+        require(produtor != eOrganico, "Parametro invalido");
+        require(produtor != address(this), "Parametro invalido");
+
         produtoresCredenciados[produtor] = block.timestamp; // Apenas para mapear alguma coisa...
     }
     
     function descredenciaProdutor(address payable produtor) public {
-        require(msg.sender == eOrganico); // Só a eOrganico pode definir isso
+        require(msg.sender == eOrganico, "Somente eOrganico pode usar esse servico");
+        require(produtor != eOrganico, "Parametro invalido");
+        require(produtor != address(this), "Parametro invalido");
+
         produtoresCredenciados[produtor] = 0; // Remove o mapeamento
     }
 
@@ -84,12 +96,18 @@ contract ContratoEsperto {
     }
 
     function credenciaCooperativa(address payable cooperativa) public {
-        require(msg.sender == eOrganico); // Só a eOrganico pode definir isso
+        require(msg.sender == eOrganico, "Somente eOrganico pode usar esse servico");
+        require(cooperativa != eOrganico, "Parametro invalido");
+        require(cooperativa != address(this), "Parametro invalido");
+
         cooperativasCredenciadas[cooperativa] = block.timestamp; // Apenas para mapear alguma coisa...
     }
     
     function descredenciaCooperativa(address payable cooperativa) public {
-        require(msg.sender == eOrganico); // Só a eOrganico pode definir isso
+        require(msg.sender == eOrganico, "Somente eOrganico pode usar esse servico");
+        require(cooperativa != eOrganico, "Parametro invalido");
+        require(cooperativa != address(this), "Parametro invalido");
+
         cooperativasCredenciadas[cooperativa] = 0; // Remove o mapeamento
     }
     
@@ -98,12 +116,18 @@ contract ContratoEsperto {
     }
 
     function credenciaTransportadora(address payable transportadora) public {
-        require(msg.sender == eOrganico); // Só a eOrganico pode definir isso
+        require(msg.sender == eOrganico, "Somente eOrganico pode usar esse servico");
+        require(transportadora != eOrganico, "Parametro invalido");
+        require(transportadora != address(this), "Parametro invalido");
+
         transportadorasCredenciadas[transportadora] = block.timestamp; // Apenas para mapear alguma coisa...
     }
     
     function descredenciaTransportadora(address payable transportadora) public {
-        require(msg.sender == eOrganico); // Só a eOrganico pode definir isso
+        require(msg.sender == eOrganico, "Somente eOrganico pode usar esse servico");
+        require(transportadora != eOrganico, "Parametro invalido");
+        require(transportadora != address(this), "Parametro invalido");
+
         transportadorasCredenciadas[transportadora] = 0; // Remove o mapeamento
     }
 
@@ -116,7 +140,7 @@ contract ContratoEsperto {
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     function informaAssinaturasDisponiveis(uint256 quantidade) public {
-        require(msg.sender == eOrganico); // Só a eOrganico pode definir isso
+        require(msg.sender == eOrganico, "Somente eOrganico pode usar esse servico");
 
         // TODO: Tem que tratar as assintaturas que expiraram
         require(quantidade >= assinaturasVigentes, "Ja ha mais assinaturas vigentes do que o informado");
@@ -125,6 +149,8 @@ contract ContratoEsperto {
     }
 
     function assinaServico(Periodos periodo) public payable returns (uint256) {
+        require(msg.sender != eOrganico, "eOrganico nao pode usar o servico");
+
         address payable cliente = msg.sender;
         require(assinaturas[cliente] == 0, "Cliente ja eh assinante"); // TODO: Tratar as assinaturas que expiraram
 
@@ -176,12 +202,14 @@ contract ContratoEsperto {
     }
 
     function cancelaAssinatura(address payable cliente) public {
-        require(msg.sender == eOrganico); // Só a eOrganico pode definir isso
+        require(msg.sender == eOrganico, "Somente eOrganico pode usar esse servico");
 
         trataCancelamentoAssinatura(cliente);
     }
     
     function cancelaAssinatura() public {
+        require(msg.sender != eOrganico, "eOrganico nao pode usar o servico");
+
         address payable cliente = msg.sender;
         require(assinaturas[cliente] != 0, "Nao eh cliente para cancelar assinatura");
         
@@ -221,7 +249,9 @@ contract ContratoEsperto {
         return devolucao;
     }
 
-    function consultaAssinaturasVigentes() public pure returns (address[] memory) {
+    function consultaAssinaturasVigentes() public view returns (address[] memory) {
+        require(msg.sender == eOrganico, "Somente eOrganico pode usar esse servico");
+
         // FIXME: Não é possível listar as assinaturas vigentes - Precisamos trocar de estrutura de armazenamento
         // TODO: Usar IterableMappings - https://docs.soliditylang.org/en/v0.7.0/types.html#iterable-mappings
         return new address[](0);
@@ -232,6 +262,8 @@ contract ContratoEsperto {
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     
     function registraSementesCertificadas(string calldata produto, uint256 quantidade) public {
+        require(msg.sender != eOrganico, "eOrganico nao pode usar o servico");
+
         address fornecedor = msg.sender;
         verificaFornecedorCredenciado(fornecedor);
         
@@ -241,6 +273,8 @@ contract ContratoEsperto {
     }
 
     function compraSementes(address fornecedor, string calldata produto, uint256 quantidade) public {
+        require(msg.sender != eOrganico, "eOrganico nao pode usar o servico");
+
         // TODO: Transformar de operação única para operação casada (Compra + Venda)
         // TODO: Transferir Ether também, para pagamento das sementes :-)
 
@@ -263,6 +297,8 @@ contract ContratoEsperto {
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     function registraProdutosCredenciados(string calldata produto, uint256 qtdSementes, uint256 qtdProdutos) public {
+        require(msg.sender != eOrganico, "eOrganico nao pode usar o servico");
+
         address produtor = msg.sender;
         verificaProdutorCredenciado(produtor);
         
@@ -272,7 +308,7 @@ contract ContratoEsperto {
         // TODO: Alguma verificação entre a quantidade de produtos e de sementes?
         
         // Verifica se o produtor tem as sementes
-        require(sementesCertificadas[produtor][produto] >= qtdSementes);
+        require(sementesCertificadas[produtor][produto] >= qtdSementes, "Produtor nao tem sementes suficientes");
 
         // Reduz as sementes
         sementesCertificadas[produtor][produto] -= qtdSementes;
@@ -286,6 +322,8 @@ contract ContratoEsperto {
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     function cooperativaRecebeProdutos(address produtor, string calldata produto, uint256 qtdProdutos) public {
+        require(msg.sender != eOrganico, "eOrganico nao pode usar o servico");
+
         address cooperativa = msg.sender;
         verificaCooperativaCredenciada(cooperativa);
         verificaProdutorCredenciado(produtor);
@@ -293,7 +331,7 @@ contract ContratoEsperto {
         require(qtdProdutos > 0, "Quantidade de produtos deve ser maior que zero");
         
         // Verifica se o produtor tem os produtos
-        require(produtosCertificados[produtor][produto] >= qtdProdutos);
+        require(produtosCertificados[produtor][produto] >= qtdProdutos, "Produtor nao tem produtos suficientes");
 
         // Transfere os produtos
         produtosCertificados[produtor][produto] -= qtdProdutos;
@@ -305,6 +343,8 @@ contract ContratoEsperto {
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     function transportadoraRecebeProdutos(address cooperativa, string calldata produto, uint256 qtdProdutos) public {
+        require(msg.sender != eOrganico, "eOrganico nao pode usar o servico");
+
         address transportadora = msg.sender;
         verificaTransportadoraCredenciada(transportadora);
         verificaCooperativaCredenciada(cooperativa);
@@ -312,7 +352,7 @@ contract ContratoEsperto {
         require(qtdProdutos > 0, "Quantidade de produtos deve ser maior que zero");
         
         // Verifica se a cooperativa tem os produtos'
-        require(produtosCertificados[cooperativa][produto] >= qtdProdutos);
+        require(produtosCertificados[cooperativa][produto] >= qtdProdutos, "Cooperativa nao tem produtos suficientes");
 
         // Transfere os produtos
         produtosCertificados[cooperativa][produto] -= qtdProdutos;
@@ -324,6 +364,8 @@ contract ContratoEsperto {
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     function clienteRecebeProdutos(address transportadora, string calldata produto, uint256 qtdProdutos) public {
+        require(msg.sender != eOrganico, "eOrganico nao pode usar o servico");
+
         address cliente = msg.sender;
         verificaCliente(cliente);
         verificaTransportadoraCredenciada(transportadora);
@@ -331,7 +373,7 @@ contract ContratoEsperto {
         require(qtdProdutos > 0, "Quantidade de produtos deve ser maior que zero");
         
         // Verifica se a transportadora tem os produtos'
-        require(produtosCertificados[transportadora][produto] >= qtdProdutos);
+        require(produtosCertificados[transportadora][produto] >= qtdProdutos, "Transportadora nao tem produtos suficientes");
 
         // Transfere os produtos
         produtosCertificados[transportadora][produto] -= qtdProdutos;
